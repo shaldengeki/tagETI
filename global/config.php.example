@@ -1,0 +1,15 @@
+<?php
+define('MYSQL_HOST', 'localhost');
+define('MYSQL_USERNAME', 'MYSQL_USERNAME');
+define('MYSQL_PASSWORD', 'MYSQL_PASSWORD');
+define('MYSQL_DATABASE', 'MYSQL_DATABASE');
+define('APP_ROOT', '/var/www'); // no trailing backslash!
+define('ROOT_URL', 'http://your.domain.here'); // no trailing backslashes!
+define('COOKIE_STRING_FILE', '/path/to/eti/cookie/string/file.txt');
+
+// this is the ETI userID of the system user who will manage tags on ETI. should be the same user given for the cookieString file.
+define('TAGETI_MANAGEMENT_USERID', '0');
+
+date_default_timezone_set('Your/Timezone');
+error_reporting(E_ALL ^ E_NOTICE);
+?>
