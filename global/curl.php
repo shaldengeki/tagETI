@@ -1,24 +1,4 @@
 <?php
-function hitPage($page,$cookieString="",$referer=ROOT_URL) {
-	$ch = curl_init();
-	curl_setopt($ch, CURLOPT_COOKIE, $cookieString);
-	curl_setopt($ch, CURLOPT_USERAGENT, "TagETI");
-	curl_setopt($ch, CURLOPT_ENCODING, "gzip,deflate");
-	curl_setopt($ch, CURLOPT_URL, $page);
-	curl_setopt($ch, CURLOPT_REFERER, $referer);
-	curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-	curl_setopt($ch, CURLOPT_FOLLOWLOCATION, 1);
-	curl_setopt($ch, CURLOPT_MAXREDIRS, 3);
-  $ret = curl_exec($ch);
-	if (curl_error($ch)) {
-		curl_close($ch);
-		return False;
-	} else {
-		curl_close($ch);
-		return $ret;		
-	}
-}
-
 function hitPageSSL($page, $cookieString="", $referer=ROOT_URL) {
 	$ch = curl_init();
 	curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, FALSE); 
@@ -37,7 +17,28 @@ function hitPageSSL($page, $cookieString="", $referer=ROOT_URL) {
 		return False;
 	} else {
 		curl_close($ch);
-		return $ret;		
+		return $ret;
+	}
+}
+
+function hitFormSSL($url, $formFields, $cookieString="", $referer=ROOT_URL) {
+	$ch = curl_init();
+	curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, FALSE);
+	curl_setopt($ch, CURLOPT_COOKIE, $cookieString);
+	curl_setopt($ch, CURLOPT_USERAGENT, "TagETI");
+	curl_setopt($ch, CURLOPT_ENCODING, "gzip,deflate");
+	curl_setopt($ch, CURLOPT_POST, 1);
+	curl_setopt($ch, CURLOPT_REFERER, $referer);
+	curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+	curl_setopt($ch, CURLOPT_POSTFIELDS, $formFields);
+	curl_setopt($ch, CURLOPT_URL, $url);
+	$ret = curl_exec($ch);
+	if (curl_error($ch)) {
+		curl_close($ch);
+		return False;
+	} else {
+    curl_close($ch);
+    return $ret;
 	}
 }
 
@@ -190,6 +191,102 @@ function parseTagPublicInfo($etiTagPage, $num=0) {
 	return $tag;
 }
 
+function getTagPrivateInfo($cookieString, $name) {
+	// Hits the ETI tag administration page for the given tag name.
+	// Returns an associative array of the tag's info if successful, False if not.
+	$etiTagPage = hitPageSSL("https://endoftheinter.net/tag.php?tag=".urlencode($name), $cookieString);
+	if (!$etiTagPage) {
+		return False;
+	}
+	$tag = parseTagPrivateInfo($etiTagPage);
+	if (!$tag) {
+		return False;
+	}
+	return $tag;
+}
+
+function parseTagPrivateInfo($pageHTML) {
+	// Parses the information on an ETI tag administration page.
+	// Returns an associative array if successful, False if not.
+
+	$page = new DOMDocument();
+	$page->loadHTML('<?xml encoding="UTF-8">' . $pageHTML);
+
+	// dirty fix
+	foreach ($page->childNodes as $item)
+	    if ($item->nodeType == XML_PI_NODE)
+	        $page->removeChild($item); // remove hack
+	$page->encoding = 'UTF-8'; // insert proper
+	$xpath = new DOMXPath($page);
+
+	$form = $page->getElementsByTagName("form")->item(0);
+	$formFields = $form->getElementsByTagName("fieldset");
+
+	$name = $page->getElementsByTagName("h2")->item(0)->nodeValue;
+
+	$descriptionFields = $formFields->item(0);
+	$description = $xpath->query("textarea[@name='description']", $descriptionFields)->item(0)->nodeValue;
+
+	$accessFields = $formFields->item(1);
+	$accessInputs = $xpath->query("label/input[@type='radio']", $accessFields);
+	foreach ($accessInputs as $input) {
+		if ($input->getAttribute("checked") != '') {
+			$access = intval($input->getAttribute("value"));
+		}
+	}
+	$access_users = array_filter(explode(",", $xpath->query("input[@name='access_users']", $accessFields)->item(0)->getAttribute("value")));
+	
+	$participationInputs = $xpath->query("label/input[@type='radio']", $formFields->item(2));
+	foreach ($participationInputs as $input) {
+		if ($input->getAttribute("checked") != '') {
+			$participation = intval($input->getAttribute("value"));
+		}
+	}
+
+	$restrictionInputs = $xpath->query("label/checkbox", $formFields->item(3));
+	$permanent = 0;
+	$inceptive = 0;
+	foreach ($restrictionInputs as $input) {
+		${$input->getAttribute("value")} = 1;
+	}
+
+	$interactionInputs = $xpath->query("input", $formFields->item(4));
+	$related = array();
+	$dependent = array();
+	$exclusive = array();
+	foreach ($interactionInputs as $input) {
+		$inputArray = array_filter(explode(",", $input->getAttribute("value")));
+		${$input->getAttribute("name")} = $inputArray;
+	}
+
+	$moderatorInput = $xpath->query("input", $formFields->item(5))->item(0);
+	$moderators = array_filter(explode(",", $moderatorInput->getAttribute("value")));
+
+	$administratorInput = $xpath->query("input", $formFields->item(6))->item(0);
+	$administrators = array_filter(explode(",", $administratorInput->getAttribute("value")));
+
+	$staff = array();
+	foreach ($moderators as $moderator) {
+		$staff[] = array('id' => $moderator, 'role' => 2);
+	}
+	foreach ($administrators as $admin) {
+		$staff[] = array('id' => $admin, 'role' => 3);
+	}
+
+	$tag = array('name' => $name,
+								'description' => $description,
+								'access' => $access,
+								'access_users' => $access_users,
+								'participation' => $participation,
+								'permanent' => $permanent,
+								'inceptive' => $inceptive,
+								'related_tags' => $related,
+								'dependency_tags' => $dependent,
+								'forbidden_tags' => $exclusive,
+								'staff' => $staff);
+	return $tag;
+}
+
 function refreshAllTags($database, $user) {
 	// updates all possible tags.
 	$cookieString = getETILoginCookie();
@@ -213,6 +310,10 @@ function refreshAllTags($database, $user) {
 			continue;
 		}
 		// grab tag private info if appropriate.
+		$privateInfo = getTagPrivateInfo($cookieString, $tagName);
+		if ($privateInfo) {
+			$tag = array_merge($tag, $privateInfo);
+		}
 
 		try {
 			$dbTag = new Tag($database, False, $tag['name']);
@@ -248,6 +349,11 @@ function refreshTag($database, $user, $name) {
 	$tag = parseTagPublicInfo($etiTagPage);
 	if (!$tag) {
 		return array('location' => "tag.php", 'status' => "An error occurred parsing the tag information from ETI. Please try again later.", 'class' => 'error');
+	}
+
+	$privateInfo = getTagPrivateInfo($cookieString, $name);
+	if ($privateInfo) {
+		$tag = array_merge($tag, $privateInfo);
 	}
 
 	try {

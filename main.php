@@ -6,7 +6,36 @@ if (!$user->loggedIn()) {
 }
 start_html($database, $user, "TagETI", "Dashboard", $_REQUEST['status'], $_REQUEST['class']);
 
+// fetch all of the topic timelines for each of this user's tags in the past 72 hours.
+$timelines = $user->getTagActivity(False, False, time() - 259200, False, 72);
+$postCountTimeline = $timelines['postCount'];
+$userCountTimeline = $timelines['userCount'];
 ?>
+<div class="row-fluid">
+  <div class="span12">
+    <h1>Tag Activity</h1>
+  </div>
+</div>
+<div class="row-fluid">
+<?php
+  echo "  <div class='span6'>\n";
+  if (count($postCountTimeline) > 0) {
+    displayTagActivityGraph("Number of Posts", $postCountTimeline, $user->tags, "postCountTimeline");
+  } else {
+    echo "    <em>No tags to display.</em>\n";
+  }
+  echo "  </div>
+  <div class='span6'>\n";
+  if (count($userCountTimeline) > 0) {
+    displayTagActivityGraph("Number of Users", $userCountTimeline, $user->tags, "userCountTimeline");
+  } else {
+    echo "    <em>No tags to display.</em>\n";
+  }
+  echo "  </div>\n";
+?>
+  <div class="span12">
+  </div>
+</div>
 <div class="row-fluid">
   <div class="span4">
     <h1>Welcome!</h1>
@@ -31,7 +60,7 @@ start_html($database, $user, "TagETI", "Dashboard", $_REQUEST['status'], $_REQUE
 ?>
     </div>
     <div class="row-fluid">
-      <h2>Tag Activity</h2>
+      <h2>Tag Moderations</h2>
 <?php
   // TODO: tag update feed containing bans, suspensions, 
   echo "Coming soon!"

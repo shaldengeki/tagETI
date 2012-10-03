@@ -60,6 +60,32 @@ function js_redirect_to($redirect_array) {
   exit;
 }
 
+function display_http_error($code=500, $contents="") {
+  switch (intval($code)) {
+    case 301:
+      $subtitle = "Moved Permanently";
+      $bodyText = $contents;
+      break;
+    case 403:
+      $subtitle = "Forbidden";
+      $bodyText = "I'm sorry, Dave. I'm afraid I can't do that.";
+      break;
+    case 404:
+      $subtitle = "Not Found";
+      $bodyText = "Oh geez. We couldn't find the page you were looking for; please check your URL and try again.";
+      break;
+    default:
+    case 500:
+      $subtitle = "Internal Server Error";
+      $bodyText = "Whoops! We had problems processing your request. Please go back and try again!";
+      break;
+  }
+
+  header('HTTP/1.0 '.intval($code).' '.$subtitle);
+  echo $bodyText;
+  exit;
+}
+
 function display_error($title="Error", $text="An unknown error occurred. Please try again.") {
   echo "<h1>".escape_output($title)."</h1>
   <p>".escape_output($text)."</p>";
@@ -67,9 +93,7 @@ function display_error($title="Error", $text="An unknown error occurred. Please 
 
 function start_html($database, $user, $title="TagETI", $subtitle="", $status="", $statusClass="") {
   echo '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
-        "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
-<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
-<head>
+        "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">'."\n".'<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">'."\n".'<head>
 	<meta http-equiv="content-type" content="text/html; charset=utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 	<title>'.escape_output($title).($subtitle != "" ? " - ".escape_output($subtitle) : "").'</title>
@@ -84,13 +108,12 @@ function start_html($database, $user, $title="TagETI", $subtitle="", $status="",
   <script type="text/javascript" src="js/jquery-ui-timepicker-addon.js"></script>
 	<script type="text/javascript" language="javascript" src="js/jquery.dropdownPlain.js"></script>
 	<script type="text/javascript" language="javascript" src="js/jquery.dataTables.min.js"></script>
+  <script type="text/javascript" src="https://www.google.com/jsapi"></script>
   <script type="text/javascript" src="js/d3.v2.min.js"></script>
   <script type="text/javascript" src="js/d3-helpers.js"></script>
 	<script type="text/javascript" language="javascript" src="js/bootstrap.min.js"></script>
 	<script type="text/javascript" language="javascript" src="js/bootstrap-dropdown.js"></script>
-	<script type="text/javascript" language="javascript" src="js/tageti.js"></script>
-</head>
-<body>
+	<script type="text/javascript" language="javascript" src="js/tageti.js"></script>'."\n".'</head>'."\n".'<body>
   <div class="navbar navbar-inverse navbar-fixed-top">
     <div class="navbar-inner">
       <div class="container-fluid">
@@ -101,10 +124,10 @@ function start_html($database, $user, $title="TagETI", $subtitle="", $status="",
         </a>
         <a href="./index.php" class="brand">TagETI</a>
         <div class="nav-collapse">
-          <ul class="nav">
-';
+          <ul class="nav">'."\n";
   if ($user->loggedIn()) {
-    foreach ($user->tags as $tag) {
+    foreach ($user->managedTags as $tag) {
+      /*
       echo '              <li class="dropdown">
                 <a href="#" class="dropdown-toggle" data-toggle="dropdown">
                   '.escape_output($tag->name).'
@@ -115,42 +138,35 @@ function start_html($database, $user, $title="TagETI", $subtitle="", $status="",
                   <li><a href="tag.php?action=edit&id='.intval($tag->id).'">Edit</a></li>
                 </ul>
               </li>
-              <li class="divider-vertical"></li>
-';
+              <li class="divider-vertical"></li>'."\n";
+      */
+      echo '              <li><a href="tag.php?action=show&id='.intval($tag->id).'">'.escape_output($tag->name).'</a></li>
+              <li class="divider-vertical"></li>'."\n";
     }
-    echo '              <li><a href="/tag.php?action=new">Add a tag</a></li>
-';
+    echo '              <li><a href="/tag.php?action=new">Add a tag</a></li>'."\n";
   }
   echo '              <li class="divider-vertical"></li>
-                
           </ul>
           <ul class="nav pull-right">
             <li class="divider-vertical"></li>
-            <li class="dropdown">
-';
+            <li class="dropdown">'."\n";
   if ($user->loggedIn()) {
     echo '              <a href="#" class="dropdown-toggle" data-toggle="dropdown"><i class="icon-user icon-white"></i>'.escape_output($user->username).'<b class="caret"></b></a>
               <ul class="dropdown-menu">
-                <a href="/user.php?action=show&id='.intval($user->id).'">Profile</a>
-';
+                <a href="/user.php?action=show&id='.intval($user->id).'">Profile</a>'."\n";
     if ($user->isAdmin() && !isset($user->switched_user)) {
-      echo '              <a href="/user.php?action=switch_user">Switch Users</a>
-';
+      echo '              <a href="/user.php?action=switch_user">Switch Users</a>'."\n";
     }
     if (isset($user->switched_user) && is_numeric($user->switched_user)) {
-      echo '              <a href="/user.php?action=switch_back">Switch Back</a>
-';
+      echo '              <a href="/user.php?action=switch_back">Switch Back</a>'."\n";
     }
     echo '                <a href="/logout.php">Sign out</a>
-              </ul>
-';
+              </ul>'."\n";
   } else {
     echo '              <a href="#" class="dropdown-toggle" data-toggle="dropdown">Sign in<b class="caret"></b></a>
-              <ul class="dropdown-menu">
-';
+              <ul class="dropdown-menu">'."\n";
     display_login_form();
-    echo '              </ul>
-';
+    echo '              </ul>'."\n";
   }
   echo '            </li>
           </ul>
@@ -158,14 +174,11 @@ function start_html($database, $user, $title="TagETI", $subtitle="", $status="",
       </div>
     </div>
   </div>
-  <div class="container-fluid">
-';
+  <div class="container-fluid">'."\n";
   if ($status != "") {
     echo '<div class="alert alert-'.escape_output($statusClass).'">
   <button class="close" data-dismiss="alert" href="#">×</button>
-  '.escape_output($status).'
-</div>
-';
+  '.escape_output($status)."\n".'</div>'."\n";
   }
 }
 
@@ -173,9 +186,7 @@ function display_login_form() {
   echo '<form id="login_form" accept-charset="UTF-8" action="/login.php" method="post">
   <label for="username">Username</label>
   <input id="username" name="username" size="30" />
-  <input class="btn btn-primary" name="commit" type="submit" value="Sign in" />
-</form>
-';
+  <input class="btn btn-primary" name="commit" type="submit" value="Sign in" />'."\n".'</form>'."\n";
 }
 
 function display_month_year_dropdown($select_id="", $select_name_prefix="form_entry", $selected=False) {
@@ -432,6 +443,45 @@ function display_tag_info($database, $user, $tag_id) {
   }
   echo "<blockquote>
   <p>".$tag->description."</p>\n</blockquote>\n";
+    // fetch the historical tag activity data.
+  $timelines = $user->getTagActivity(array($tag), False, False, time(), 10);
+  $postCountTimeline = $timelines['postCount'];
+  if (count($postCountTimeline) > 0) {
+    echo "<div class='row-fluid'>
+  <div class='span12'>\n";
+    displayTagActivityGraph("Number of Posts", $postCountTimeline, array($tag), "postCountTimeline");
+    echo "  </div>\n</div>\n";
+  }
+  echo "<div class='row-fluid'>
+  <div class='span4'>
+    <h4 class='center-horizontal'>Related Tags</h4>\n<ul>\n";
+  foreach ($tag->relatedTags as $relatedTag) {
+    echo "      <li><a href='tag.php?action=show&id=".intval($relatedTag['id'])."'>".escape_output($relatedTag['name'])."</a><button type='button' class='close remove-tag-link remove-related-tag-link' data-dismiss='alert'>×</button></li>\n";
+  }
+  if ($user->isTagAdmin($tag_id)) {
+    echo "      <li><a href='#' class='add-tag-link add-related-tag-link'>Add a tag</a></li>\n";
+  }
+  echo "    </ul>\n  </div>
+  <div class='span4'>
+    <h4 class='center-horizontal'>Dependent Tags</h4>
+    <ul>\n";
+  foreach ($tag->dependencyTags as $dependencyTag) {
+    echo "      <li><a href='tag.php?action=show&id=".intval($dependencyTag['id'])."'>".escape_output($dependencyTag['name'])."</a><button type='button' class='close remove-tag-link remove-dependency-tag-link' data-dismiss='alert'>×</button></li>\n";
+  }
+  if ($user->isTagAdmin($tag_id)) {
+    echo "      <li><a href='#' class='add-tag-link add-dependency-tag-link'>Add a tag</a></li>\n";
+  }
+  echo "    </ul>\n  </div>
+  <div class='span4'>
+    <h4 class='center-horizontal'>Forbidden Tags</h4>
+    <ul>\n";
+  foreach ($tag->forbiddenTags as $forbiddenTag) {
+    echo "      <li><a href='tag.php?action=show&id=".intval($forbiddenTag['id'])."'>".escape_output($forbiddenTag['name'])."</a><button type='button' class='close remove-tag-link remove-forbidden-tag-link' data-dismiss='alert'>×</button></li>\n";
+  }
+  if ($user->isTagAdmin($tag_id)) {
+    echo "      <li><a href='#' class='add-tag-link add-forbidden-tag-link'>Add a tag</a></li>\n";
+  }
+  echo "    </ul>\n  </div>\n</div>\n";
   echo "<h3>Latest Topics</h3>\n";
   $latestTopics = $tag->getLatestTopics();
   echo "<div class='row-fluid'>
@@ -457,28 +507,7 @@ function display_tag_info($database, $user, $tag_id) {
   echo "      </tbody>
       </table>
     </div>
-  </div>\n<div class='row-fluid'>
-  <div class='span4'>
-    <h4 class='center-horizontal'>Related Tags</h4>
-    <ul>\n";
-  foreach ($tag->relatedTags as $relatedTag) {
-    echo "      <li><a href='tag.php?action=show&id=".intval($relatedTag['id'])."'>".escape_output($relatedTag['name'])."</a></li>\n";
-  }
-  echo "    </ul>\n  </div>
-  <div class='span4'>
-    <h4 class='center-horizontal'>Dependent Tags</h4>
-    <ul>\n";
-  foreach ($tag->dependencyTags as $dependencyTag) {
-    echo "      <li><a href='tag.php?action=show&id=".intval($dependencyTag['id'])."'>".escape_output($dependencyTag['name'])."</a></li>\n";
-  }
-  echo "    </ul>\n  </div>
-  <div class='span4'>
-    <h4 class='center-horizontal'>Forbidden Tags</h4>
-    <ul>\n";
-  foreach ($tag->forbiddenTags as $forbiddenTag) {
-    echo "      <li><a href='tag.php?action=show&id=".intval($forbiddenTag['id'])."'>".escape_output($forbiddenTag['name'])."</a></li>\n";
-  }
-  echo "    </ul>\n  </div>\n</div>\n";
+  </div>\n";
 }
 
 function display_tag_add_form($database, $user) {
@@ -505,8 +534,8 @@ function display_tag_add_form($database, $user) {
     <p>When you're ready, select the tag you want to add below and hit Add Tag!</p>
     <form class='form-inline' action='tag.php?action=new' method='post'>
       <select id='tag_name' name='tag_name'>\n";
-  foreach ($user->unManagedTags as $tag_array) {
-    echo "        <option value='".escape_output($tag_array['name'])."'>".escape_output($tag_array['name'])."</option>\n";
+  foreach ($user->unManagedTags as $tag) {
+    echo "        <option value='".escape_output($tag->name)."'>".escape_output($tag->name)."</option>\n";
   }
   echo "      </select>
     <a class='btn btn-xlarge btn-primary' href='#' id='add-tag-to-manage'>Add Tag</a>
@@ -601,9 +630,7 @@ function display_history_plot($database, $user, $form_id) {
 function display_footer() {
   echo '    <hr />
     <p>Created and maintained by <a href="http://llanim.us">shaldengeki</a>.</p>
-  </div>
-</body>
-</html>';
+  </div>'."\n".'</body>'."\n".'</html>';
 }
 
 ?>

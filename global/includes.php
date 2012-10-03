@@ -5,6 +5,7 @@ include_once("./global/curl.php");
 include_once("./global/user.php");
 include_once("./global/tag.php");
 include_once("./global/display.php");
+include_once("./global/chart.php");
 include_once("./global/misc.php");
 
 $database = new DbConn(MYSQL_HOST, MYSQL_USERNAME, MYSQL_PASSWORD, MYSQL_DATABASE);
@@ -21,4 +22,7 @@ if (!isset($_REQUEST['status'])) {
 if (!isset($_REQUEST['action'])) {
   $_REQUEST['action'] = 'index';
 }
+date_default_timezone_set(SERVER_TIMEZONE);
+$outputTimeZone = new DateTimeZone(OUTPUT_TIMEZONE);
+
 ?>

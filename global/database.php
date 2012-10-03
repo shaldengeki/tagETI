@@ -33,15 +33,15 @@ class DbConn extends mysqli {
   }
   public function stdQuery($query) {
     //executes a query with standardized error message.
-    $result = $this->query($query)
-      or die("Could not query MySQL database in ".$_SERVER['PHP_SELF'].".<br />
-          Time: ".time());
-    /* Use the bottom command if you need to debug */
     // $result = $this->query($query)
     //   or die("Could not query MySQL database in ".$_SERVER['PHP_SELF'].".<br />
-    //       Query: ".$query."<br />
-    //       ".$this->error."<br />
     //       Time: ".time());
+    /* Use the bottom command if you need to debug */
+    $result = $this->query($query)
+      or die("Could not query MySQL database in ".$_SERVER['PHP_SELF'].".<br />
+          Query: ".$query."<br />
+          ".$this->error."<br />
+          Time: ".time());
     return $result;
   }
   public function queryFirstRow($query) {

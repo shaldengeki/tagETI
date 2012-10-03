@@ -4,17 +4,20 @@ class User {
   public $id;
   public $username;
   public $tags;
+  public $managedTags;
+  public $unManagedTags;
   public $lastLoginCheckTime;
   public $role;
   public $switched_user;
   public $dbConn;
   public function __construct($dbConn, $id=False, $username=False) {
     $this->dbConn = $dbConn;
-    if ($id == 0) {
+    if ($id === 0) {
       // creating a new user (or specifying a guest user). initialize blank values.
       $this->id = 0;
       $this->username = $username;
       $this->tags = array();
+      $this->managedTags = array();
       $this->unManagedTags = array();
       $this->role = 0;
     } else {
@@ -33,8 +36,9 @@ class User {
         throw new Exception('ID Not Found');
       }
       $this->username = $username;
-      $this->tags = $this->getTags();
+      $this->managedTags = $this->getTags(True);
       $this->unManagedTags = $this->getTags(False);
+      $this->tags = $this->managedTags + $this->unManagedTags;
       $this->role = $this->getRole();
 
       if (isset($_SESSION['switched_user'])) {
@@ -53,7 +57,7 @@ class User {
       return False;
     }
     // if we last checked for login under a second ago then return true.
-    if (isset($this->id == $_SESSION['id']) && $_SESSION['lastLoginCheckTime'] > microtime(true) - 1) {
+    if (($this->id == $_SESSION['id']) && $_SESSION['lastLoginCheckTime'] > microtime(true) - 1) {
       return True;
     } elseif (isset($_SESSION['switched_user'])) {
       $checkID = $_SESSION['switched_user'];
@@ -72,8 +76,8 @@ class User {
       Enters a failed login entry for a given username and the current IP into the database.
       Returns a boolean.
     */
-    $insert_log = $this->dbConn->stdQuery("INSERT IGNORE INTO `failed_logins` (`ip`, `date`, `username`) VALUES ('".$_SERVER['REMOTE_ADDR']."', NOW(), ".$this->quoteSmart($username).")");
-    if !($this->dbConn->insert_id) {
+    $insert_log = $this->dbConn->stdQuery("INSERT IGNORE INTO `failed_logins` (`ip`, `date`, `username`) VALUES ('".$_SERVER['REMOTE_ADDR']."', NOW(), ".$this->dbConn->quoteSmart($username).")");
+    if (!$this->dbConn->insert_id) {
       return False;
     } else {
       return True;
@@ -114,7 +118,7 @@ class User {
       return array("location" => "login.php", "status" => "Please enter a username to sign in.");
     }
 
-    $check_ll_username = hitPage('http://boards.endoftheinter.net/scripts/login.php?username='.urlencode($username).'&ip='.$_SERVER['REMOTE_ADDR']);
+    $check_ll_username = hitPageSSL('https://boards.endoftheinter.net/scripts/login.php?username='.urlencode($username).'&ip='.$_SERVER['REMOTE_ADDR']);
     if ($check_ll_username != "1:".$username) {
       $this->logFailedLogin($username);
       return array("location" => "login.php", "status" => "Please sign into ETI first.", 'class' => 'error');
@@ -187,11 +191,11 @@ class User {
     */
     if ($switch_back) {
       // get user entry in database.
-      $findUsername = intval($this->dbConn->queryFirstValue("SELECT `userid` FROM `seinma_llusers`.`ll_users` WHERE `username` = ".$this->dbConn->quoteSmart($username)." LIMIT 1"));
-      if (!$findUsername) {
+      $findUserID = intval($this->dbConn->queryFirstValue("SELECT `userid` FROM `seinma_llusers`.`ll_users` WHERE `username` = ".$this->dbConn->quoteSmart($username)." LIMIT 1"));
+      if (!$findUserID) {
         return array("location" => "main.php", "status" => "The given user to switch to doesn't exist in the database.", 'class' => 'error');
       }
-      $newUser = new User($this->dbConn, $findUsername);
+      $newUser = new User($this->dbConn, $findUserID);
       $newUser->switched_user = $_SESSION['id'];
       $_SESSION['lastLoginCheckTime'] = $newUser->lastLoginCheckTime = microtime(true);
       $_SESSION['id'] = $newUser->id;
@@ -204,15 +208,21 @@ class User {
     }
     return array("location" => "main.php", "status" => "Successfully switched to ".escape_output($newUser->username).".".(($switch_back) ? " LOG OUT OR SWITCH BACK WHEN YOU ARE DONE." : ""), 'class' => 'success');
   }
-  public function getTags($managed=True) {
+  public function getTags($managed=NULL) {
     /*
       Retrieves the current user object's tags.
       If $managed is True, retrieves only tags that are managed by tagETI.
       If false, retrieves only tags that are not managed by tagETI.
+      If null, retrieves both.
       Returns an array of Tag objects.
     */
-    // return only those tags that the user is staff on and that have been flagged to be managed by tagETI.
-    $tags = $this->dbConn->stdQuery("SELECT `".MYSQL_DATABASE."`.`tags_users`.`tag_id` FROM `seinma_llusers`.`tags_users` LEFT OUTER JOIN `".MYSQL_DATABASE."`.`tags` ON `tags`.`id` = `tags_users`.`tag_id` WHERE (`".MYSQL_DATABASE."`.`tags`.`managed` = ".intval($managed)." && `tags_users`.`user_id` = ".intval($this->id)." && `tags_users`.`role` > 0) ORDER BY `seinma_llusers`.`tags_users`.`tag_id` ASC");
+    if (is_null($managed)) {
+      $managedCriteria = "";
+    } else {
+      $managedCriteria = "`".MYSQL_DATABASE."`.`tags`.`managed` = ".intval($managed)." && ";
+    }
+
+    $tags = $this->dbConn->stdQuery("SELECT `seinma_llusers`.`tags_users`.`tag_id` AS `id` FROM `seinma_llusers`.`tags_users` LEFT OUTER JOIN `".MYSQL_DATABASE."`.`tags` ON `tags`.`id` = `tags_users`.`tag_id` WHERE (".$managedCriteria."`tags_users`.`user_id` = ".intval($this->id)." && `tags_users`.`role` > 0) ORDER BY `seinma_llusers`.`tags_users`.`tag_id` ASC");
     $user_tags = array();
     while ($tag = mysqli_fetch_assoc($tags)) {
         $user_tags[intval($tag['id'])] = new Tag($this->dbConn, intval($tag['id']));
@@ -243,7 +253,7 @@ class User {
     if (!isset($this->tags[intval($tag_id)])) {
       return False;
     }
-    return intval($this->tags[intval($tag_id)]);
+    return intval($this->tags[intval($tag_id)]->staff[$this->id]['role']);
   }
   public function isTagStaff($tag_id) {
     $tag_role = $this->getTagRole($tag_id);
@@ -271,6 +281,101 @@ class User {
       return False;
     }
     return intval($this->role) > 0;
+  }
+  public function getTagActivity($tags=False, $metrics=False, $start=False, $end=False, $numPartitions=False) {
+    /* 
+      Given a set of tag objects, retrieve the tag activity timelines for the given interval.
+      Defaults to all metrics for all tags belonging to the user for the entirey of ETI's existence.
+      Returns an array with keys for each activity metric provided by getActivityTimeline, each assigned to a list of [date,tag1,tag2,...] lists.
+    */
+    if (count($this->tags) > 0) {
+      $start = ($start === False) ? 1084263862 : $start;
+      $end = ($end === False) ? time() : $end;
+      $numPartitions = ($numPartitions === False) ? 10 : $numPartitions;
+      if ($tags === False) {
+        $tags = $this->tags;
+      }
+      $tagTimelines = array();
+      $timelineBins = array();
+
+      $partitionSize = floor(($end - $start) / $numPartitions);
+      // change date string based on partition size.
+      if ($partitionSize >= 31536000) {
+        $dateFormat = 'Y';
+      } elseif ($partitionSize >= 2592000) {
+        $dateFormat = 'M Y';
+      } elseif ($partitionSize >= 86400) {
+        $dateFormat = 'n/j';
+      } elseif ($partitionSize >= 3600) {
+        $dateFormat = 'n/j G:00';
+      } else {
+        $dateFormat = 'n/j G:i';
+      }
+
+      for ($partition_i = 1; $partition_i <= $numPartitions; $partition_i++) {
+        $timelineBins[$partition_i] = 1;
+      }
+
+      foreach ($tags as $tag) {
+        $tagTimelines[$tag->name] = array();
+        foreach ($tag->getActivityTimeline($start, $end, $numPartitions) as $timelineEntry) {
+          // set the metrics if they haven't already been set.
+          if ($metrics === False) {
+            $metrics = array_slice(array_keys($timelineEntry), 1, NULL, True);
+          }
+          // put this in the bin to which it belongs.
+          $bin = intval(($timelineEntry['dateStamp'] - $start) / $partitionSize);
+          if ($bin >= 0) {
+            if (!isset($timelineBins[$bin])) {
+              $timelineBins[$bin] = 1;
+            }
+            if (!isset($tagTimelines[$tag->name][$bin])) {
+              $tagTimelines[$tag->name][$bin] = $timelineEntry;
+            } else {
+              foreach ($metrics as $metric) {
+                $tagTimelines[$tag->name][$bin][$metric] += $timelineEntry[$metric];
+              }
+            }
+          }
+        }
+      }
+
+      ksort($timelineBins);
+      $activityTimelines = array();
+      foreach ($metrics as $metric) {
+        $activityTimelines[$metric] = array();
+      }
+      $outputTimeZone = new DateTimeZone(OUTPUT_TIMEZONE);
+      foreach ($timelineBins as $bin => $foo) {
+        $date = $start + $bin * $partitionSize;
+        $dateObject = new DateTime('@'.$date);
+        $dateObject->setTimeZone($outputTimeZone);
+        $dateStamp = $dateObject->format($dateFormat);
+        $activityTimelineRow = array();
+        foreach ($metrics as $metric) {
+          $activityTimelineRow[$metric] = array($dateStamp);
+        }
+        foreach ($tags as $tag) {
+          if (!isset($tagTimelines[$tag->name][$bin])) {
+            foreach ($metrics as $metric) {
+              $activityTimelineRow[$metric][] = 0;
+            }
+          } else {
+            foreach ($metrics as $metric) {
+              $activityTimelineRow[$metric][] = $tagTimelines[$tag->name][$bin][$metric];
+            }
+          }
+        }
+        foreach ($metrics as $metric) {
+          $activityTimelines[$metric][$date] = $activityTimelineRow[$metric];
+        }
+      }
+    } else {
+      foreach ($metrics as $metric) {
+        $activityTimelines[$metric] = array();
+      }
+    }
+    return $activityTimelines;
   }
 }
 
